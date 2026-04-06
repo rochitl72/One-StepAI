@@ -1,7 +1,7 @@
 import { supabase, RANK_THRESHOLDS, BADGES } from "../supabase";
 
 export type RankerInput = {
-  userId: string;        // Auth0 sub (user_id in profiles)
+  userId: string; // Auth0 sub (profiles.user_id)
   issueUrl: string;
   repo: string;
   difficulty: number;
@@ -61,7 +61,6 @@ export async function runRanker(input: RankerInput) {
   }
 
   // Language-specific badges
-  // Language badges: use total contributions as proxy (language column not in schema)
   const { count: langCount } = await supabase
     .from("contributions")
     .select("*", { count: "exact", head: true })
@@ -75,21 +74,17 @@ export async function runRanker(input: RankerInput) {
     newBadgeSlugs.push("pythonista");
   }
 
-  // Update profile XP and rank (using user_id text field)
   await supabase
     .from("profiles")
-    .update({ xp: newXp, rank: newRank })
-    .eq("user_id", input.userId)
-    .eq("id", profile.id);
+    .update({ xp: newXp, rank: newRank, updated_at: new Date().toISOString() })
+    .eq("user_id", input.userId);
 
-  // Insert new badges
   if (newBadgeSlugs.length > 0) {
     await supabase.from("badge_awards").insert(
       newBadgeSlugs.map((slug) => ({ user_id: input.userId, badge_slug: slug }))
     );
   }
 
-  // Record contribution (only columns that exist in the schema)
   await supabase.from("contributions").insert({
     user_id: input.userId,
     issue_url: input.issueUrl,
@@ -98,6 +93,8 @@ export async function runRanker(input: RankerInput) {
     status: "merged",
     maintainer_rating: input.maintainerRating,
     merged_at: new Date().toISOString(),
+    language: input.language,
+    xp_awarded: xpAwarded,
   });
 
   return { xpAwarded, newXp, newRank, earnedBadges: newBadgeSlugs };

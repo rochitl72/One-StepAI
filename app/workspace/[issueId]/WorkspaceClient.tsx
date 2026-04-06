@@ -3,6 +3,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { SageMessage } from "../../../lib/agents/sage";
+import AgentPermissionsPanel from "../../components/AgentPermissionsPanel";
+import MentorMessageContent from "../../components/MentorMessageContent";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -32,6 +34,14 @@ export default function WorkspaceClient({ repoFullName, issueNumber }: Workspace
   const [sageInput, setSageInput] = useState("");
   const [sageLoading, setSageLoading] = useState(false);
 
+  const [mentorTab, setMentorTab] = useState<"sage" | "solution">("sage");
+  const [solutionOptIn, setSolutionOptIn] = useState(false);
+  const [solutionAckCheckbox, setSolutionAckCheckbox] = useState(false);
+  const [solutionMessages, setSolutionMessages] = useState<SageMessage[]>([]);
+  const [solutionInput, setSolutionInput] = useState("");
+  const [solutionLoading, setSolutionLoading] = useState(false);
+  const [patchModal, setPatchModal] = useState<string | null>(null);
+
   const [terminalLines, setTerminalLines] = useState<string[]>([
     "Welcome to Forge — E2B cloud sandbox",
     "Type a command and press Enter to run it.",
@@ -47,7 +57,7 @@ export default function WorkspaceClient({ repoFullName, issueNumber }: Workspace
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [sageMessages]);
+  }, [sageMessages, solutionMessages, mentorTab]);
 
   useEffect(() => {
     terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -152,6 +162,90 @@ export default function WorkspaceClient({ repoFullName, issueNumber }: Workspace
     }
   }
 
+  async function sendToSolution() {
+    const input = solutionInput.trim();
+    if (!input || !solutionOptIn) return;
+
+    const userMsg: SageMessage = { role: "user", content: input };
+    const newMessages = [...solutionMessages, userMsg];
+    setSolutionMessages(newMessages);
+    setSolutionInput("");
+    setSolutionLoading(true);
+
+    try {
+      const res = await fetch("/api/agents/solution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: newMessages,
+          context: {
+            fileName: selectedFile || undefined,
+            fileContent: fileContent ? fileContent.slice(0, 8000) : undefined,
+            issueTitle: issueData?.title,
+            issueBody: issueData?.body?.slice(0, 8000),
+          },
+          acknowledgedElevated: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Solution failed");
+      setSolutionMessages([
+        ...newMessages,
+        { role: "assistant", content: data.reply || "No response." },
+      ]);
+    } catch {
+      setSolutionMessages([
+        ...newMessages,
+        {
+          role: "assistant",
+          content: "Solution agent failed to respond. Check PERPLEXITY_API_KEY and try again.",
+        },
+      ]);
+    } finally {
+      setSolutionLoading(false);
+    }
+  }
+
+  async function generatePatchFile() {
+    if (!solutionOptIn || solutionMessages.length === 0) return;
+    setSolutionLoading(true);
+    try {
+      const res = await fetch("/api/agents/solution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            ...solutionMessages,
+            {
+              role: "user",
+              content:
+                "Output only a unified diff (git apply format) or clearly separated per-file code blocks with paths. Minimize prose outside code/diff.",
+            },
+          ],
+          context: {
+            fileName: selectedFile || undefined,
+            fileContent: fileContent ? fileContent.slice(0, 8000) : undefined,
+            issueTitle: issueData?.title,
+            issueBody: issueData?.body?.slice(0, 8000),
+          },
+          patchOnly: true,
+          acknowledgedElevated: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Patch failed");
+      setPatchModal(data.reply || "");
+    } catch {
+      setPatchModal("Could not generate a patch. Try again after a shorter conversation.");
+    } finally {
+      setSolutionLoading(false);
+    }
+  }
+
+  function openGitHubCompare() {
+    window.open(`https://github.com/${repoFullName}/compare`, "_blank", "noopener,noreferrer");
+  }
+
   async function runTerminalCommand() {
     const cmd = terminalInput.trim();
     if (!cmd) return;
@@ -227,6 +321,7 @@ export default function WorkspaceClient({ repoFullName, issueNumber }: Workspace
           )}
         </div>
         <div className="flex items-center gap-2 text-xs">
+          <AgentPermissionsPanel />
           <span className="bg-violet-500/20 text-violet-400 px-2 py-1 rounded">Forge</span>
           <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">Sage</span>
           <span className="bg-amber-500/20 text-amber-400 px-2 py-1 rounded">E2B</span>
@@ -234,7 +329,7 @@ export default function WorkspaceClient({ repoFullName, issueNumber }: Workspace
       </div>
 
       {/* Main 3-panel layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* File explorer */}
         <div className="w-52 shrink-0 border-r border-zinc-800 overflow-y-auto bg-zinc-900/40 text-xs">
           <div className="px-3 py-2 text-zinc-500 font-medium uppercase tracking-wide text-[10px]">
@@ -352,17 +447,69 @@ export default function WorkspaceClient({ repoFullName, issueNumber }: Workspace
           </div>
         </div>
 
-        {/* Sage chat panel */}
-        <div className="w-72 shrink-0 border-l border-zinc-800 flex flex-col bg-zinc-900/20">
-          <div className="border-b border-zinc-800 px-4 py-2.5 flex items-center gap-2 shrink-0">
-            <div className="w-6 h-6 rounded bg-emerald-500 flex items-center justify-center text-white font-bold text-xs">
-              S
-            </div>
-            <div>
-              <div className="text-sm font-medium text-white">Sage</div>
-              <div className="text-xs text-zinc-500">Socratic Mentor</div>
-            </div>
+        {/* Sage + Solution mentor panel */}
+        <div className="w-[22rem] min-w-[18rem] max-w-[min(100vw,22rem)] shrink-0 h-full min-h-0 border-l border-zinc-800 flex flex-col overflow-hidden bg-zinc-900/20">
+          <div className="flex border-b border-zinc-800 shrink-0">
+            <button
+              type="button"
+              onClick={() => setMentorTab("sage")}
+              className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${
+                mentorTab === "sage"
+                  ? "bg-zinc-800/80 text-white border-b-2 border-emerald-500"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Sage
+            </button>
+            <button
+              type="button"
+              onClick={() => setMentorTab("solution")}
+              className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${
+                mentorTab === "solution"
+                  ? "bg-zinc-800/80 text-white border-b-2 border-orange-500"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Solution β
+            </button>
           </div>
+
+          {mentorTab === "sage" ? (
+            <div className="border-b border-zinc-800 px-4 py-2.5 shrink-0">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-6 h-6 rounded bg-emerald-500 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                  S
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-white">Sage</div>
+                  <div className="text-xs text-zinc-500">Socratic Mentor · Perplexity Sonar</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                <span className="text-[10px] text-rose-400 font-medium">Sage will never write code for you</span>
+              </div>
+              <div className="text-[10px] text-zinc-600 mt-1">
+                Ask questions — Sage responds with guiding questions only
+              </div>
+            </div>
+          ) : (
+            <div className="border-b border-zinc-800 px-4 py-2.5 shrink-0 bg-orange-950/20">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-6 h-6 rounded bg-orange-500 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                  ⚡
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-white">Solution agent (beta)</div>
+                  <div className="text-xs text-orange-400/90">Concrete fixes · not Socratic Sage</div>
+                </div>
+              </div>
+              <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">
+                Elevated workflow: may propose code and diffs. Review everything before{" "}
+                <span className="text-zinc-400">git push</span> or PR. No silent commits from OpenStep.
+              </p>
+            </div>
+          )}
 
           {issueData && (
             <div className="border-b border-zinc-800 px-4 py-3 bg-zinc-900/40">
@@ -371,61 +518,234 @@ export default function WorkspaceClient({ repoFullName, issueNumber }: Workspace
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {sageMessages.length === 0 && (
-              <div className="text-xs text-zinc-600 text-center py-4">
-                Ask Sage anything about the code. Hint: Sage will guide you with questions, not answers.
+          {mentorTab === "sage" ? (
+            <>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                {sageMessages.length === 0 && (
+                  <div className="text-xs text-zinc-600 text-center py-4">
+                    Ask Sage anything about the code. Hint: Sage will guide you with questions, not answers.
+                  </div>
+                )}
+                {sageMessages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex w-full min-w-0 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`min-w-0 max-w-full px-3 py-2.5 rounded-xl leading-relaxed overflow-hidden ${
+                        msg.role === "user" ? "max-w-[92%] " : "w-full "
+                      }${
+                        msg.role === "user"
+                          ? "bg-violet-600 text-white rounded-br-sm"
+                          : "bg-emerald-900/30 border border-emerald-500/20 text-zinc-200 rounded-bl-sm"
+                      }`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className="flex items-center gap-1 mb-1.5">
+                          <span className="text-emerald-400 text-[10px] font-medium">💡 Sage asks:</span>
+                        </div>
+                      )}
+                      <MentorMessageContent
+                        content={msg.content}
+                        variant={msg.role === "user" ? "user" : "sage"}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {sageLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-zinc-800 px-3 py-2 rounded-xl text-xs text-zinc-400">
+                      <span className="animate-pulse">Sage is thinking...</span>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
               </div>
-            )}
-            {sageMessages.map((msg, i) => (
-              <div key={i} className={msg.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                <div
-                  className={`max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
-                    msg.role === "user"
-                      ? "bg-violet-600 text-white"
-                      : "bg-zinc-800 text-zinc-200"
-                  }`}
-                >
-                  {msg.role === "assistant" && (
-                    <span className="block text-emerald-400 text-[10px] font-medium mb-1">💡 Sage</span>
-                  )}
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-            {sageLoading && (
-              <div className="flex justify-start">
-                <div className="bg-zinc-800 px-3 py-2 rounded-xl text-xs text-zinc-400">
-                  <span className="animate-pulse">Sage is thinking...</span>
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
 
-          <div className="border-t border-zinc-800 p-3 shrink-0">
-            <div className="flex gap-2">
-              <input
-                className="flex-1 bg-zinc-800 text-xs text-zinc-200 placeholder-zinc-600 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-violet-500"
-                placeholder="Ask Sage..."
-                value={sageInput}
-                onChange={(e) => setSageInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !sageLoading && sendToSage()}
-                disabled={sageLoading}
-              />
+              <div className="border-t border-zinc-800 p-3 shrink-0">
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 bg-zinc-800 text-xs text-zinc-200 placeholder-zinc-600 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-violet-500"
+                    placeholder="Ask Sage..."
+                    value={sageInput}
+                    onChange={(e) => setSageInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && !sageLoading && sendToSage()}
+                    disabled={sageLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => sendToSage()}
+                    disabled={sageLoading || !sageInput.trim()}
+                    className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs px-3 py-2 rounded-lg transition-colors"
+                  >
+                    →
+                  </button>
+                </div>
+                <div className="text-[10px] text-zinc-700 mt-1.5 text-center">Sage never writes code for you</div>
+              </div>
+            </>
+          ) : !solutionOptIn ? (
+            <div className="flex-1 flex flex-col p-4 min-h-0">
+              <p className="text-xs text-zinc-400 mb-3 leading-relaxed">
+                Before using Solution agent, confirm you understand it is <strong className="text-zinc-200">not</strong>{" "}
+                credential-isolated Socratic Sage: it may output patches and implementation steps for you to review and
+                apply locally.
+              </p>
+              <label className="flex items-start gap-2 text-[11px] text-zinc-500 cursor-pointer mb-4">
+                <input
+                  type="checkbox"
+                  checked={solutionAckCheckbox}
+                  onChange={(e) => setSolutionAckCheckbox(e.target.checked)}
+                  className="mt-0.5 rounded border-zinc-600"
+                />
+                <span>
+                  I understand this mode proposes concrete code and diffs; I will review before any commit or PR, and
+                  OpenStep will not push to GitHub without my action on GitHub.
+                </span>
+              </label>
               <button
-                onClick={() => sendToSage()}
-                disabled={sageLoading || !sageInput.trim()}
-                className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs px-3 py-2 rounded-lg transition-colors"
+                type="button"
+                disabled={!solutionAckCheckbox}
+                onClick={() => setSolutionOptIn(true)}
+                className="w-full py-2 rounded-lg text-xs font-medium bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white"
               >
-                →
+                Enable Solution agent
               </button>
             </div>
-            <div className="text-[10px] text-zinc-700 mt-1.5 text-center">
-              Sage never writes code for you
+          ) : (
+            <>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                {solutionMessages.length === 0 && (
+                  <div className="text-xs text-zinc-600 text-center py-4">
+                    Describe the fix you want. Solution agent may respond with explanation and code.
+                  </div>
+                )}
+                {solutionMessages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex w-full min-w-0 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`min-w-0 max-w-full px-3 py-2.5 rounded-xl leading-relaxed overflow-hidden ${
+                        msg.role === "user" ? "max-w-[92%] " : "w-full "
+                      }${
+                        msg.role === "user"
+                          ? "bg-orange-700 text-white rounded-br-sm"
+                          : "bg-orange-950/40 border border-orange-500/25 text-zinc-200 rounded-bl-sm"
+                      }`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className="flex items-center gap-1 mb-1.5">
+                          <span className="text-orange-400 text-[10px] font-medium">⚡ Solution:</span>
+                        </div>
+                      )}
+                      <MentorMessageContent
+                        content={msg.content}
+                        variant={msg.role === "user" ? "user" : "solution"}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {solutionLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-zinc-800 px-3 py-2 rounded-xl text-xs text-zinc-400">
+                      <span className="animate-pulse">Solution agent is working...</span>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {solutionMessages.length > 0 &&
+                solutionMessages[solutionMessages.length - 1]?.role === "assistant" &&
+                !solutionLoading && (
+                  <div className="px-3 py-2 flex flex-col gap-1.5 shrink-0 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md z-10">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => generatePatchFile()}
+                        className="flex-1 text-[10px] py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-orange-300 border border-orange-500/30 font-medium"
+                      >
+                        Generate patch
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openGitHubCompare()}
+                        className="flex-1 text-[10px] py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-600 font-medium"
+                      >
+                        Open PR on GitHub
+                      </button>
+                    </div>
+                    <p className="text-[9px] text-zinc-500 text-center leading-snug">
+                      Apply locally, push a branch, then use GitHub compare — no auto-commit from this app.
+                    </p>
+                  </div>
+                )}
+
+              <div className="border-t border-zinc-800 p-3 shrink-0">
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 bg-zinc-800 text-xs text-zinc-200 placeholder-zinc-600 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-orange-500"
+                    placeholder="Ask for a concrete fix..."
+                    value={solutionInput}
+                    onChange={(e) => setSolutionInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && !solutionLoading && sendToSolution()}
+                    disabled={solutionLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => sendToSolution()}
+                    disabled={solutionLoading || !solutionInput.trim()}
+                    className="bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs px-3 py-2 rounded-lg transition-colors"
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {patchModal !== null && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+            onClick={(e) => e.target === e.currentTarget && setPatchModal(null)}
+          >
+            <div className="bg-zinc-950 border border-orange-500/30 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                <span className="text-sm font-medium text-white">Generated patch</span>
+                <button
+                  type="button"
+                  onClick={() => setPatchModal(null)}
+                  className="text-zinc-500 hover:text-white text-lg leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              <pre className="flex-1 overflow-auto p-4 text-[11px] text-zinc-300 font-mono whitespace-pre-wrap">
+                {patchModal}
+              </pre>
+              <div className="flex gap-2 p-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(patchModal);
+                  }}
+                  className="flex-1 py-2 rounded-lg text-xs bg-orange-600 hover:bg-orange-500 text-white"
+                >
+                  Copy to clipboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPatchModal(null)}
+                  className="px-4 py-2 rounded-lg text-xs bg-zinc-800 text-zinc-300"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

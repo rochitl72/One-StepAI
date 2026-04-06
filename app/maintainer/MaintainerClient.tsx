@@ -104,6 +104,13 @@ export default function MaintainerClient({ user }: { user: { name?: string; pict
   object: "dashboard:maintainer"
 })`}
             </pre>
+            <div className="mt-3 pt-3 border-t border-zinc-700">
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                <span className="text-zinc-300 font-medium">M2M Authentication:</span> When the Ranker
+                agent is triggered by Guardian (webhook), it presents an Auth0 M2M bearer token to the
+                Ranker API route. Agent-to-agent calls are authenticated — not just user-to-agent calls.
+              </p>
+            </div>
           </div>
         </div>
 

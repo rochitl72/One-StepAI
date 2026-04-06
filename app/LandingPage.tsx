@@ -21,7 +21,18 @@ const STACK = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <>
+      <div className="bg-violet-600/90 text-white px-4 py-2 text-center text-xs">
+        <span className="font-medium">👋 Hackathon Judge?</span> Log in with GitHub then click &quot;Try
+        demo mode&quot; on the dashboard — no real GitHub history needed.{" "}
+        <a
+          href="/auth/login?returnTo=/dashboard"
+          className="underline font-medium hover:text-violet-200"
+        >
+          Sign in →
+        </a>
+      </div>
+      <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Nav */}
       <nav className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -169,6 +180,38 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
+
+          <div className="mt-8 bg-zinc-900 border border-emerald-500/20 rounded-xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
+                Security guarantee
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span className="text-white font-medium">🔒 Zero raw token exposure</span>
+                <span className="text-zinc-500 text-xs">
+                  Sage (the LLM) only receives structured text — file names, error messages. Never your
+                  GitHub token.
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-white font-medium">⏱ Tokens expire per-operation</span>
+                <span className="text-zinc-500 text-xs">
+                  Token Vault issues a scoped credential for one operation, then it expires. No long-lived
+                  secrets in agent memory.
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-white font-medium">🎭 Two-role system, one codebase</span>
+                <span className="text-zinc-500 text-xs">
+                  Students and Maintainers see entirely different UIs, enforced by Auth0 FGA at the server
+                  layer before any JSX loads.
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -244,6 +287,7 @@ export default function LandingPage() {
       <footer className="border-t border-zinc-800 px-6 py-8 text-center text-sm text-zinc-600">
         OpenStep.ai · Auth0 × Token Vault Hackathon · Next.js · Auth0 · Perplexity · E2B · Supabase
       </footer>
-    </div>
+      </div>
+    </>
   );
 }

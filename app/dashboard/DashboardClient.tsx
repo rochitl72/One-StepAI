@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { GitHubIssue } from "../../lib/agents/oracle";
 import { RANK_THRESHOLDS, BADGES, getRank } from "../../lib/gamedata";
+import AgentPermissionsPanel from "../components/AgentPermissionsPanel";
 
 type ProfileData = {
   github_username: string;
@@ -64,11 +65,11 @@ export default function DashboardClient({ user }: DashboardClientProps) {
     fetchProfile();
   }, [fetchProfile]);
 
-  async function runScout() {
+  async function runScoutWithUsername(overrideUsername?: string) {
     setScanning(true);
     setError(null);
     try {
-      const githubUsername = user.nickname || user.name || "";
+      const githubUsername = overrideUsername || user.nickname || user.name || "";
       const res = await fetch("/api/agents/scout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,6 +82,10 @@ export default function DashboardClient({ user }: DashboardClientProps) {
     } finally {
       setScanning(false);
     }
+  }
+
+  async function runScout() {
+    await runScoutWithUsername();
   }
 
   async function runOracle() {
@@ -128,6 +133,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
           <span className="font-semibold text-white">OpenStep AI</span>
         </Link>
         <div className="flex items-center gap-4">
+          <AgentPermissionsPanel />
           <span className="text-sm text-zinc-400">{user.name || user.nickname}</span>
           {user.picture && (
             <Image src={user.picture} alt="avatar" width={32} height={32} className="rounded-full" />
@@ -165,20 +171,34 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                 </div>
               </div>
 
-              {/* XP bar */}
-              {nextRank && (
-                <div>
-                  <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mb-1">
-                    <div
-                      className="h-full bg-gradient-to-r from-violet-500 to-blue-500 rounded-full transition-all"
-                      style={{ width: `${xpProgress}%` }}
-                    />
-                  </div>
-                  <div className="text-xs text-zinc-500">
-                    {xpToNext} XP to {nextRank.name}
-                  </div>
+              {/* XP Progress */}
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-zinc-500">
+                    {rank.emoji} {rank.name}
+                  </span>
+                  {nextRank && (
+                    <span className="text-xs text-zinc-500">
+                      {nextRank.emoji} {nextRank.name}
+                    </span>
+                  )}
                 </div>
-              )}
+                <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700 ease-out"
+                    style={{
+                      width: `${Math.max(4, xpProgress)}%`,
+                      background: "linear-gradient(90deg, #7c3aed, #3b82f6)",
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-xs font-mono text-violet-400">{profile?.xp || 0} XP</span>
+                  {nextRank && (
+                    <span className="text-xs text-zinc-600">{xpToNext} XP to next rank</span>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Skill fingerprint */}
@@ -233,6 +253,13 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                 >
                   {scanning ? "Scanning GitHub..." : "Run Scout Agent"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => runScoutWithUsername("demo")}
+                  className="text-xs text-zinc-500 hover:text-violet-400 transition-colors mt-2 underline underline-offset-2"
+                >
+                  Try demo mode (no GitHub needed)
+                </button>
               </div>
             )}
 
@@ -245,12 +272,19 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                   return (
                     <div
                       key={badge.id}
-                      title={badge.desc}
-                      className={`aspect-square rounded-lg flex items-center justify-center text-xl ${
-                        earned ? "bg-zinc-800" : "bg-zinc-800/40 opacity-30"
+                      title={earned ? `${badge.name}: ${badge.desc}` : `Locked: ${badge.desc}`}
+                      className={`aspect-square rounded-lg flex flex-col items-center justify-center text-lg cursor-help transition-all ${
+                        earned
+                          ? "bg-zinc-800 border border-zinc-700 shadow-lg"
+                          : "bg-zinc-800/30 opacity-25 grayscale"
                       }`}
                     >
-                      {badge.emoji}
+                      <span>{badge.emoji}</span>
+                      {earned && (
+                        <span className="text-[8px] text-zinc-500 mt-0.5 text-center px-0.5 leading-tight truncate w-full text-center">
+                          {badge.name.split(" ")[0]}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -349,8 +383,13 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                   )}
 
                   <div className="flex items-center justify-between">
-                    <div className="flex gap-1.5 flex-wrap">
-                      {issue.labels.slice(0, 3).map((label) => (
+                    <div className="flex gap-1.5 flex-wrap items-center">
+                      {issue.language && (
+                        <span className="text-xs bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded">
+                          {issue.language}
+                        </span>
+                      )}
+                      {issue.labels.slice(0, 2).map((label) => (
                         <span
                           key={label.name}
                           className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded"
@@ -358,8 +397,11 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                           {label.name}
                         </span>
                       ))}
+                      <span className="text-xs text-zinc-600 bg-zinc-800/50 px-2 py-0.5 rounded">
+                        ✦ matched to your level
+                      </span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <a
                         href={issue.html_url}
                         target="_blank"

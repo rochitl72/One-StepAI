@@ -9,20 +9,42 @@ export async function POST(req: NextRequest) {
 
   const { githubUsername, githubToken } = await req.json();
 
+  if (githubUsername === "demo" || githubUsername?.startsWith?.("demo-")) {
+    const { DEMO_FINGERPRINT } = await import("../../../../lib/demoFingerprint");
+    const { data: existing } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("user_id", session.user.sub)
+      .single();
+
+    if (existing) {
+      await supabase
+        .from("profiles")
+        .update({ skill_fingerprint: DEMO_FINGERPRINT })
+        .eq("user_id", session.user.sub);
+    } else {
+      await supabase.from("profiles").insert({
+        user_id: session.user.sub,
+        skill_fingerprint: DEMO_FINGERPRINT,
+        xp: 750,
+        rank: "Contributor",
+      });
+    }
+    return NextResponse.json({ fingerprint: DEMO_FINGERPRINT, demo: true });
+  }
+
   try {
     const fingerprint = await runScout(
       githubUsername,
       githubToken || process.env.GITHUB_TOKEN || ""
     );
 
-    // Store github_username/avatar inside the fingerprint jsonb (no separate columns in schema)
     const enrichedFingerprint = {
       ...fingerprint,
       github_username: githubUsername,
       github_avatar: session.user.picture,
     };
 
-    // Check if profile exists, update or insert
     const { data: existing } = await supabase
       .from("profiles")
       .select("id, xp, rank")

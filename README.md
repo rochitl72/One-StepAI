@@ -6,6 +6,21 @@ Built for the **Auth0 × Token Vault Hackathon**.
 
 ---
 
+## 🏆 Judge Quick Start
+
+**Live demo:** https://your-vercel-url.vercel.app
+
+**Demo credentials:** Sign in with GitHub, then click "Try demo mode" — no real GitHub history required.
+
+**To run locally:**
+
+1. `git clone ... && cd openstep && npm install`
+2. `cp env.local.example .env.local` — fill in Auth0, Supabase, and Perplexity keys (see README below)
+3. Run `supabase-schema.sql` in your Supabase SQL editor
+4. `npm run dev` → http://localhost:3000
+
+---
+
 ## What is OpenStep AI?
 
 Every CS student wants to contribute to open source. Almost none know where to start.
@@ -34,6 +49,8 @@ npm run dev → http://localhost:3000
 | **Forge** | Loads repo file tree into Monaco editor + spins up E2B cloud sandbox | File-read only |
 | **Guardian** | Listens to GitHub webhooks for PR events, triggers Ranker on merge | Webhook-read only |
 | **Ranker** | Computes XP, updates rank, awards smart badges, writes to Supabase | DB write only |
+
+**Solution agent (beta)** — Separate from Sage: optional workspace mode with explicit opt-in. Uses its own API route (`/api/agents/solution`) and system prompt so it may propose concrete code and diffs (Perplexity Sonar). Same structured context as Sage (no raw OAuth token in the LLM prompt). **Generate patch** opens a review modal; **Open PR on GitHub** links to the repo compare page — the app does not silently commit or push.
 
 ---
 
@@ -78,12 +95,13 @@ openstep/
 ├── app/
 │   ├── page.tsx                    # Root — redirects logged-in users to /dashboard
 │   ├── LandingPage.tsx             # Public landing page
+│   ├── components/                 # AgentPermissionsPanel, MentorMessageContent (markdown chat)
 │   ├── dashboard/
 │   │   ├── page.tsx                # Auth-guarded server component
 │   │   └── DashboardClient.tsx     # XP bar, badges, issue list, Scout/Oracle UI
 │   ├── workspace/[issueId]/
 │   │   ├── page.tsx                # Auth-guarded server component
-│   │   └── WorkspaceClient.tsx     # Monaco editor + file tree + Sage chat + terminal
+│   │   └── WorkspaceClient.tsx     # Monaco + file tree + Sage / Solution tabs + terminal
 │   ├── maintainer/
 │   │   ├── page.tsx                # Auth0 FGA-gated (maintainer role only)
 │   │   └── MaintainerClient.tsx    # Rate contributions, award XP
@@ -92,6 +110,7 @@ openstep/
 │       │   ├── scout/route.ts      # POST — analyze GitHub profile
 │       │   ├── oracle/route.ts     # POST — find matched issues
 │       │   ├── sage/route.ts       # POST — Socratic chat via Perplexity
+│       │   ├── solution/route.ts   # POST — Solution agent (beta); concrete fixes, opt-in
 │       │   ├── forge/route.ts      # POST — load repo file tree / file content
 │       │   └── ranker/route.ts     # POST — award XP and badges
 │       ├── profile/route.ts        # GET — fetch user profile + badges
@@ -103,14 +122,15 @@ openstep/
 │   ├── auth0.ts                    # Auth0Client instance
 │   ├── supabase.ts                 # Supabase server client + types
 │   ├── gamedata.ts                 # XP ranks, badges (client-safe, no env vars)
+│   ├── m2m.ts                      # Optional M2M token check for agent routes
 │   └── agents/
 │       ├── scout.ts                # GitHub profile analysis logic
 │       ├── oracle.ts               # GitHub issue search + difficulty scoring
 │       ├── sage.ts                 # Perplexity Sonar system prompt + API call
 │       └── ranker.ts               # XP formula + badge unlock conditions
-├── proxy.ts                        # Auth0 middleware (Next.js 16 convention)
+├── proxy.ts                        # Auth0 request boundary (Next.js 16 convention; replaces middleware.ts)
 ├── supabase-schema.sql             # Run this in Supabase SQL editor
-└── .env.local.example              # All required environment variables
+└── env.local.example               # All required environment variables (copy to .env.local)
 ```
 
 ---
@@ -185,7 +205,7 @@ npm install
 ### 2. Set up environment variables
 
 ```bash
-cp .env.local.example .env.local
+cp env.local.example .env.local
 ```
 
 Fill in `.env.local`:

@@ -71,17 +71,23 @@ export async function runOracle(
   return unique.sort((a, b) => (a.difficulty || 5) - (b.difficulty || 5)).slice(0, 12);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function computeDifficulty(issue: GitHubIssue, _fp: SkillFingerprint): number {
+function computeDifficulty(issue: GitHubIssue, fp: SkillFingerprint): number {
   const labelNames = issue.labels.map((l) => l.name.toLowerCase());
   let base = 5;
+
   if (labelNames.includes("good first issue")) base = 2;
   else if (labelNames.includes("help wanted")) base = 5;
   else if (labelNames.includes("bug")) base = 4;
   else if (labelNames.includes("enhancement")) base = 6;
+  else if (labelNames.some((l) => l.includes("feature"))) base = 7;
 
   const bodyLen = (issue.body || "").length;
-  if (bodyLen > 2000) base += 1;
+  if (bodyLen > 3000) base += 2;
+  else if (bodyLen > 1500) base += 1;
+
+  if (fp.experience_level === "beginner") base = Math.min(base, 3);
+  else if (fp.experience_level === "intermediate") base = Math.min(Math.max(base, 3), 7);
+  else if (fp.experience_level === "advanced") base = Math.max(base, 5);
 
   return Math.min(10, Math.max(1, base));
 }
