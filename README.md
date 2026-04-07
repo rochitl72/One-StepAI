@@ -8,6 +8,10 @@ Public repo: [github.com/rochitl72/One-StepAI](https://github.com/rochitl72/One-
 
 ## Judge / demo quick start
 
+**Live demo:** https://one-step-ai.vercel.app
+
+**Demo video:** https://youtu.be/bdcfjKUloF0?si=L8jRUAp-C9X5P3p-
+
 1. Open the deployed site (after [Vercel](#deploy-to-vercel-free)) or run locally below.
 2. **Sign in** (Auth0 — e.g. Google).
 3. On the dashboard, enter your **GitHub username**, run **Scout**, then **Oracle** (or use **Search issues**).
