@@ -2,6 +2,10 @@
   "name": "openstep",
   "version": "0.1.0",
   "private": true,
+  "contributors": [
+    { "name": "rochitl72", "url": "https://github.com/rochitl72" },
+    { "name": "Adith-Sree-Jey", "url": "https://github.com/Adith-Sree-Jey" }
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",

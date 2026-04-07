@@ -168,6 +168,15 @@ Add an **Auth0 Action** (login flow) to set this claim for designated users.
 
 ---
 
+## Contributors
+
+- [rochitl72](https://github.com/rochitl72) — maintainer
+- [Adith-Sree-Jey](https://github.com/Adith-Sree-Jey)
+
+To get **write access** to the repo, the maintainer must invite you: GitHub → **One-StepAI** → **Settings** → **Collaborators** → **Add people**.
+
+---
+
 ## License
 
 MIT
