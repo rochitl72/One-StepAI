@@ -26,6 +26,13 @@ export type UserProfile = {
   created_at: string;
 };
 
+export type RepoSignal = {
+  full_name: string;
+  language: string | null;
+  topics: string[];
+  stargazers_count: number;
+};
+
 export type SkillFingerprint = {
   languages: Record<string, number>;
   commit_count: number;
@@ -35,6 +42,9 @@ export type SkillFingerprint = {
   experience_level: "beginner" | "intermediate" | "advanced";
   github_username?: string;
   github_avatar?: string;
+  /** Top public repos (for Oracle “why matched” copy) */
+  top_repo_signals?: RepoSignal[];
+  public_repo_count?: number;
 };
 
 export type Contribution = {

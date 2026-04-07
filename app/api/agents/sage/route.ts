@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const m2mToken = req.headers.get("x-agent-token");
-  if (m2mToken && !verifyM2MToken(m2mToken, "sage")) {
+  if (m2mToken && !(await verifyM2MToken(m2mToken, "sage"))) {
     return NextResponse.json({ error: "Invalid agent token" }, { status: 403 });
   }
 

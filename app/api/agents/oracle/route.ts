@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "../../../../lib/auth0";
 import { runOracle } from "../../../../lib/agents/oracle";
 import { supabase } from "../../../../lib/supabase";
+import type { SkillFingerprint } from "../../../../lib/supabase";
+import { mergeProfileGithubIntoFingerprint } from "../../../../lib/fingerprintForUser";
 
 export async function POST(req: NextRequest) {
   const session = await auth0.getSession();
@@ -12,7 +14,7 @@ export async function POST(req: NextRequest) {
   try {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("skill_fingerprint")
+      .select("skill_fingerprint, github_username")
       .eq("user_id", session.user.sub)
       .single();
 
@@ -20,8 +22,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Run Scout first" }, { status: 400 });
     }
 
+    const fp = mergeProfileGithubIntoFingerprint(
+      profile.skill_fingerprint as SkillFingerprint,
+      profile.github_username
+    );
+    if (!fp) {
+      return NextResponse.json({ error: "Run Scout first" }, { status: 400 });
+    }
+
     const issues = await runOracle(
-      profile.skill_fingerprint,
+      fp,
       githubToken || process.env.GITHUB_TOKEN || ""
     );
 

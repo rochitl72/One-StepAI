@@ -1,5 +1,5 @@
--- OpenStep AI — Supabase Schema
--- Run this in the Supabase SQL editor
+-- One-Step AI (OpenStep) — PostgreSQL schema for Supabase
+-- Run the full file once in: Supabase Dashboard → SQL Editor
 
 -- Profiles table (user_id = Auth0 sub)
 create table if not exists profiles (
@@ -92,18 +92,14 @@ create index if not exists idx_contributions_user_id on contributions(user_id);
 create index if not exists idx_contributions_pr_url on contributions(pr_url);
 create index if not exists idx_activity_log_username on activity_log(github_username);
 
--- ── DEMO DATA (run manually for judge demo / video recording) ──
--- This inserts a demo user profile with XP and badges so the dashboard
--- looks populated without needing a real GitHub contribution history.
+-- ── DEMO DATA (optional — run manually) ──
+-- Replace YOUR_AUTH0_SUB with your Auth0 User ID from the dashboard.
 --
--- After running, log in with GitHub and run Scout with "demo" username
--- to link this fingerprint to your Auth0 session.
---
--- Example: Seed badge_awards for demo (replace 'YOUR_AUTH0_SUB' with your actual sub)
 -- insert into badge_awards (user_id, badge_slug) values
 --   ('YOUR_AUTH0_SUB', 'first_bug'),
 --   ('YOUR_AUTH0_SUB', 'doc_writer'),
---   ('YOUR_AUTH0_SUB', 'test_author');
+--   ('YOUR_AUTH0_SUB', 'test_author')
+-- on conflict (user_id, badge_slug) do nothing;
 --
--- Update XP for demo:
 -- update profiles set xp = 750, rank = 'Contributor' where user_id = 'YOUR_AUTH0_SUB';
+-- Or use "Try demo mode" on the dashboard (Scout with demo fingerprint).

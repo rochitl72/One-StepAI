@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "../../../../lib/auth0";
 import { runScout } from "../../../../lib/agents/scout";
 import { supabase } from "../../../../lib/supabase";
+import { isValidGithubUsername, normalizeGithubUsername } from "../../../../lib/githubUsername";
 
 export async function POST(req: NextRequest) {
   const session = await auth0.getSession();
@@ -33,15 +34,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ fingerprint: DEMO_FINGERPRINT, demo: true });
   }
 
+  const normalized = normalizeGithubUsername(
+    typeof githubUsername === "string" ? githubUsername : ""
+  );
+  if (!isValidGithubUsername(normalized)) {
+    return NextResponse.json(
+      { error: "Enter a valid GitHub username (not your Google name)." },
+      { status: 400 }
+    );
+  }
+
   try {
     const fingerprint = await runScout(
-      githubUsername,
+      normalized,
       githubToken || process.env.GITHUB_TOKEN || ""
     );
 
     const enrichedFingerprint = {
       ...fingerprint,
-      github_username: githubUsername,
+      github_username: normalized,
       github_avatar: session.user.picture,
     };
 
@@ -54,11 +65,16 @@ export async function POST(req: NextRequest) {
     if (existing) {
       await supabase
         .from("profiles")
-        .update({ skill_fingerprint: enrichedFingerprint })
+        .update({
+          skill_fingerprint: enrichedFingerprint,
+          github_username: normalized,
+          updated_at: new Date().toISOString(),
+        })
         .eq("user_id", session.user.sub);
     } else {
       await supabase.from("profiles").insert({
         user_id: session.user.sub,
+        github_username: normalized,
         skill_fingerprint: enrichedFingerprint,
         xp: 0,
         rank: "Newbie",
